@@ -129,7 +129,7 @@ done:
 	return ret;
 }
 
-int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
+static int __bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags, bool tx)
 {
 	int sock, seq = 0, ret;
 	struct nlattr *nla, *nla_xdp;
@@ -156,8 +156,12 @@ int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
 	/* started nested attribute for XDP */
 	nla = (struct nlattr *)(((char *)&req)
 				+ NLMSG_ALIGN(req.nh.nlmsg_len));
-	nla->nla_type = NLA_F_NESTED | IFLA_XDP;
+	nla->nla_type = NLA_F_NESTED;
 	nla->nla_len = NLA_HDRLEN;
+	if (tx)
+		nla->nla_type |= IFLA_XDP_TX;
+	else
+		nla->nla_type |= IFLA_XDP;
 
 	/* add XDP fd */
 	nla_xdp = (struct nlattr *)((char *)nla + nla->nla_len);
@@ -186,6 +190,16 @@ int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
 cleanup:
 	close(sock);
 	return ret;
+}
+
+int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
+{
+	return __bpf_set_link_xdp_fd(ifindex, fd, flags, false);
+}
+
+int bpf_set_link_xdp_tx_fd(int ifindex, int fd, __u32 flags)
+{
+	return __bpf_set_link_xdp_fd(ifindex, fd, flags, true);
 }
 
 static int __dump_link_nlmsg(struct nlmsghdr *nlh,

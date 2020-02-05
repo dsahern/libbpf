@@ -28,6 +28,7 @@ typedef int (*__dump_nlmsg_t)(struct nlmsghdr *nlmsg, libbpf_dump_nlmsg_t,
 struct xdp_id_md {
 	int ifindex;
 	__u32 flags;
+	bool egress;
 	struct xdp_link_info info;
 };
 
@@ -132,7 +133,7 @@ done:
 	return ret;
 }
 
-int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
+static int __bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags, bool egress)
 {
 	int sock, seq = 0, ret;
 	struct nlattr *nla, *nla_xdp;
@@ -159,7 +160,7 @@ int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
 	/* started nested attribute for XDP */
 	nla = (struct nlattr *)(((char *)&req)
 				+ NLMSG_ALIGN(req.nh.nlmsg_len));
-	nla->nla_type = NLA_F_NESTED | IFLA_XDP;
+	nla->nla_type = NLA_F_NESTED | (egress ? IFLA_XDP_EGRESS : IFLA_XDP);
 	nla->nla_len = NLA_HDRLEN;
 
 	/* add XDP fd */
@@ -191,6 +192,16 @@ cleanup:
 	return ret;
 }
 
+int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
+{
+	return __bpf_set_link_xdp_fd(ifindex, fd, flags, false);
+}
+
+int bpf_set_link_xdp_egress_fd(int ifindex, int fd, __u32 flags)
+{
+	return __bpf_set_link_xdp_fd(ifindex, fd, flags, true);
+}
+
 static int __dump_link_nlmsg(struct nlmsghdr *nlh,
 			     libbpf_dump_nlmsg_t dump_link_nlmsg, void *cookie)
 {
@@ -211,15 +222,17 @@ static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 	struct nlattr *xdp_tb[IFLA_XDP_MAX + 1];
 	struct xdp_id_md *xdp_id = cookie;
 	struct ifinfomsg *ifinfo = msg;
+	unsigned int atype;
 	int ret;
 
 	if (xdp_id->ifindex && xdp_id->ifindex != ifinfo->ifi_index)
 		return 0;
 
-	if (!tb[IFLA_XDP])
+	atype = xdp_id->egress ? IFLA_XDP_EGRESS : IFLA_XDP;
+	if (!tb[atype])
 		return 0;
 
-	ret = libbpf_nla_parse_nested(xdp_tb, IFLA_XDP_MAX, tb[IFLA_XDP], NULL);
+	ret = libbpf_nla_parse_nested(xdp_tb, IFLA_XDP_MAX, tb[atype], NULL);
 	if (ret)
 		return ret;
 
@@ -251,10 +264,10 @@ static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 	return 0;
 }
 
-int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
-			  size_t info_size, __u32 flags)
+static int __bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
+				   size_t info_size, __u32 flags, bool egress)
 {
-	struct xdp_id_md xdp_id = {};
+	struct xdp_id_md xdp_id;
 	int sock, ret;
 	__u32 nl_pid;
 	__u32 mask;
@@ -274,6 +287,7 @@ int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
 
 	xdp_id.ifindex = ifindex;
 	xdp_id.flags = flags;
+	xdp_id.egress = egress;
 
 	ret = libbpf_nl_get_link(sock, nl_pid, get_xdp_info, &xdp_id);
 	if (!ret) {
@@ -285,6 +299,18 @@ int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
 
 	close(sock);
 	return ret;
+}
+
+int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
+			  size_t info_size, __u32 flags)
+{
+	return __bpf_get_link_xdp_info(ifindex, info, info_size, flags, false);
+}
+
+int bpf_get_link_xdp_egress_info(int ifindex, struct xdp_link_info *info,
+				 size_t info_size, __u32 flags)
+{
+	return __bpf_get_link_xdp_info(ifindex, info, info_size, flags, true);
 }
 
 static __u32 get_xdp_id(struct xdp_link_info *info, __u32 flags)
@@ -307,6 +333,18 @@ int bpf_get_link_xdp_id(int ifindex, __u32 *prog_id, __u32 flags)
 	int ret;
 
 	ret = bpf_get_link_xdp_info(ifindex, &info, sizeof(info), flags);
+	if (!ret)
+		*prog_id = get_xdp_id(&info, flags);
+
+	return ret;
+}
+
+int bpf_get_link_xdp_egress_id(int ifindex, __u32 *prog_id, __u32 flags)
+{
+	struct xdp_link_info info;
+	int ret;
+
+	ret = bpf_get_link_xdp_egress_info(ifindex, &info, sizeof(info), flags);
 	if (!ret)
 		*prog_id = get_xdp_id(&info, flags);
 

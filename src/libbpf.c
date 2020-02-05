@@ -1598,6 +1598,7 @@ static int bpf_object__process_kconfig_line(struct bpf_object *obj,
 
 static int bpf_object__read_kconfig_file(struct bpf_object *obj, void *data)
 {
+#if 0
 	char buf[PATH_MAX];
 	struct utsname uts;
 	int len, err = 0;
@@ -1632,6 +1633,9 @@ static int bpf_object__read_kconfig_file(struct bpf_object *obj, void *data)
 out:
 	gzclose(file);
 	return err;
+#else
+	return -EINVAL;
+#endif
 }
 
 static int bpf_object__read_kconfig_mem(struct bpf_object *obj,
@@ -6243,6 +6247,8 @@ static const struct bpf_sec_def section_defs[] = {
 		.expected_attach_type = BPF_TRACE_FEXIT,
 		.is_attach_btf = true,
 		.attach_fn = attach_trace),
+	BPF_EAPROG_SEC("xdp_egress",		BPF_PROG_TYPE_XDP,
+						BPF_XDP_EGRESS),
 	BPF_PROG_SEC("xdp",			BPF_PROG_TYPE_XDP),
 	BPF_PROG_SEC("perf_event",		BPF_PROG_TYPE_PERF_EVENT),
 	BPF_PROG_SEC("lwt_in",			BPF_PROG_TYPE_LWT_IN),
@@ -6297,7 +6303,6 @@ static const struct bpf_sec_def section_defs[] = {
 						BPF_CGROUP_GETSOCKOPT),
 	BPF_EAPROG_SEC("cgroup/setsockopt",	BPF_PROG_TYPE_CGROUP_SOCKOPT,
 						BPF_CGROUP_SETSOCKOPT),
-	BPF_PROG_SEC("struct_ops",		BPF_PROG_TYPE_STRUCT_OPS),
 };
 
 #undef BPF_PROG_SEC_IMPL
@@ -6361,6 +6366,8 @@ int libbpf_prog_type_by_name(const char *name, enum bpf_prog_type *prog_type,
 	if (sec_def) {
 		*prog_type = sec_def->prog_type;
 		*expected_attach_type = sec_def->expected_attach_type;
+		printf("libbpf_prog_type_by_name: prog type %d expected_attach_type %d\n",
+			sec_def->prog_type, sec_def->expected_attach_type);
 		return 0;
 	}
 

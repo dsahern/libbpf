@@ -433,6 +433,12 @@ LIBBPF_API int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags);
 LIBBPF_API int bpf_get_link_xdp_id(int ifindex, __u32 *prog_id, __u32 flags);
 LIBBPF_API int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
 				     size_t info_size, __u32 flags);
+LIBBPF_API int bpf_set_link_xdp_egress_fd(int ifindex, int fd, __u32 flags);
+LIBBPF_API int bpf_get_link_xdp_egress_id(int ifindex, __u32 *prog_id,
+					  __u32 flags);
+LIBBPF_API int bpf_get_link_xdp_egress_info(int ifindex,
+					    struct xdp_link_info *info,
+					    size_t info_size, __u32 flags);
 
 struct perf_buffer;
 

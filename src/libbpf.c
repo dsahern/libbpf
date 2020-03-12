@@ -1596,6 +1596,7 @@ static int bpf_object__process_kconfig_line(struct bpf_object *obj,
 
 static int bpf_object__read_kconfig_file(struct bpf_object *obj, void *data)
 {
+#if 0
 	char buf[PATH_MAX];
 	struct utsname uts;
 	int len, err = 0;
@@ -1630,6 +1631,9 @@ static int bpf_object__read_kconfig_file(struct bpf_object *obj, void *data)
 out:
 	gzclose(file);
 	return err;
+#else
+	return -EINVAL;
+#endif
 }
 
 static int bpf_object__read_kconfig_mem(struct bpf_object *obj,

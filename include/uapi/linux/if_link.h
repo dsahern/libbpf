@@ -170,6 +170,7 @@ enum {
 	IFLA_PROP_LIST,
 	IFLA_ALT_IFNAME, /* Alternative ifname */
 	IFLA_PERM_ADDRESS,
+	IFLA_XDP_EGRESS, /* nested attribute with 1 or more IFLA_XDP_ attrs */
 	__IFLA_MAX
 };
 

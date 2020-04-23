@@ -238,9 +238,44 @@ static int __dump_link_nlmsg(struct nlmsghdr *nlh,
 	return dump_link_nlmsg(cookie, ifi, tb);
 }
 
-static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
+static int process_xdp_attr(struct nlattr *tb, struct xdp_link_info *info)
 {
 	struct nlattr *xdp_tb[IFLA_XDP_MAX + 1];
+	int ret;
+
+	ret = libbpf_nla_parse_nested(xdp_tb, IFLA_XDP_MAX, tb, NULL);
+	if (ret)
+		return ret;
+
+	if (!xdp_tb[IFLA_XDP_ATTACHED])
+		return 0;
+
+	info->attach_mode = libbpf_nla_getattr_u8(xdp_tb[IFLA_XDP_ATTACHED]);
+
+	if (info->attach_mode == XDP_ATTACHED_NONE)
+		return 0;
+
+	if (xdp_tb[IFLA_XDP_PROG_ID])
+		info->prog_id = libbpf_nla_getattr_u32(
+			xdp_tb[IFLA_XDP_PROG_ID]);
+
+	if (xdp_tb[IFLA_XDP_SKB_PROG_ID])
+		info->skb_prog_id = libbpf_nla_getattr_u32(
+			xdp_tb[IFLA_XDP_SKB_PROG_ID]);
+
+	if (xdp_tb[IFLA_XDP_DRV_PROG_ID])
+		info->drv_prog_id = libbpf_nla_getattr_u32(
+			xdp_tb[IFLA_XDP_DRV_PROG_ID]);
+
+	if (xdp_tb[IFLA_XDP_HW_PROG_ID])
+		info->hw_prog_id = libbpf_nla_getattr_u32(
+			xdp_tb[IFLA_XDP_HW_PROG_ID]);
+
+	return 0;
+}
+
+static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
+{
 	struct xdp_id_md *xdp_id = cookie;
 	struct ifinfomsg *ifinfo = msg;
 	int ret;
@@ -248,37 +283,11 @@ static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 	if (xdp_id->ifindex && xdp_id->ifindex != ifinfo->ifi_index)
 		return 0;
 
-	if (!tb[IFLA_XDP])
-		return 0;
-
-	ret = libbpf_nla_parse_nested(xdp_tb, IFLA_XDP_MAX, tb[IFLA_XDP], NULL);
-	if (ret)
-		return ret;
-
-	if (!xdp_tb[IFLA_XDP_ATTACHED])
-		return 0;
-
-	xdp_id->info.attach_mode = libbpf_nla_getattr_u8(
-		xdp_tb[IFLA_XDP_ATTACHED]);
-
-	if (xdp_id->info.attach_mode == XDP_ATTACHED_NONE)
-		return 0;
-
-	if (xdp_tb[IFLA_XDP_PROG_ID])
-		xdp_id->info.prog_id = libbpf_nla_getattr_u32(
-			xdp_tb[IFLA_XDP_PROG_ID]);
-
-	if (xdp_tb[IFLA_XDP_SKB_PROG_ID])
-		xdp_id->info.skb_prog_id = libbpf_nla_getattr_u32(
-			xdp_tb[IFLA_XDP_SKB_PROG_ID]);
-
-	if (xdp_tb[IFLA_XDP_DRV_PROG_ID])
-		xdp_id->info.drv_prog_id = libbpf_nla_getattr_u32(
-			xdp_tb[IFLA_XDP_DRV_PROG_ID]);
-
-	if (xdp_tb[IFLA_XDP_HW_PROG_ID])
-		xdp_id->info.hw_prog_id = libbpf_nla_getattr_u32(
-			xdp_tb[IFLA_XDP_HW_PROG_ID]);
+	if (tb[IFLA_XDP]) {
+		ret = process_xdp_attr(tb[IFLA_XDP], &xdp_id->info);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }

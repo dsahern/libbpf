@@ -133,7 +133,7 @@ done:
 }
 
 static int __bpf_set_link_xdp_fd_replace(int ifindex, int fd, int old_fd,
-					 __u32 flags)
+					 __u32 flags, __u16 nla_type)
 {
 	int sock, seq = 0, ret;
 	struct nlattr *nla, *nla_xdp;
@@ -160,7 +160,7 @@ static int __bpf_set_link_xdp_fd_replace(int ifindex, int fd, int old_fd,
 	/* started nested attribute for XDP */
 	nla = (struct nlattr *)(((char *)&req)
 				+ NLMSG_ALIGN(req.nh.nlmsg_len));
-	nla->nla_type = NLA_F_NESTED | IFLA_XDP;
+	nla->nla_type = NLA_F_NESTED | nla_type;
 	nla->nla_len = NLA_HDRLEN;
 
 	/* add XDP fd */
@@ -203,7 +203,9 @@ cleanup:
 int bpf_set_link_xdp_fd_opts(int ifindex, int fd, __u32 flags,
 			     const struct bpf_xdp_set_link_opts *opts)
 {
+	__u16 nla_type = IFLA_XDP;
 	int old_fd = -1;
+	bool egress;
 
 	if (!OPTS_VALID(opts, bpf_xdp_set_link_opts))
 		return -EINVAL;
@@ -213,14 +215,17 @@ int bpf_set_link_xdp_fd_opts(int ifindex, int fd, __u32 flags,
 		flags |= XDP_FLAGS_REPLACE;
 	}
 
-	return __bpf_set_link_xdp_fd_replace(ifindex, fd,
-					     old_fd,
-					     flags);
+	egress = OPTS_GET(opts, egress, false);
+	if (egress)
+		nla_type = IFLA_XDP_EGRESS;
+
+	return __bpf_set_link_xdp_fd_replace(ifindex, fd, old_fd, flags,
+					     nla_type);
 }
 
 int bpf_set_link_xdp_fd(int ifindex, int fd, __u32 flags)
 {
-	return __bpf_set_link_xdp_fd_replace(ifindex, fd, 0, flags);
+	return __bpf_set_link_xdp_fd_replace(ifindex, fd, 0, flags, IFLA_XDP);
 }
 
 static int __dump_link_nlmsg(struct nlmsghdr *nlh,
@@ -271,6 +276,10 @@ static int process_xdp_attr(struct nlattr *tb, struct xdp_link_info *info)
 		info->hw_prog_id = libbpf_nla_getattr_u32(
 			xdp_tb[IFLA_XDP_HW_PROG_ID]);
 
+	if (xdp_tb[IFLA_XDP_EGRESS_CORE_PROG_ID])
+		info->egress_core_prog_id = libbpf_nla_getattr_u32(
+			xdp_tb[IFLA_XDP_EGRESS_CORE_PROG_ID]);
+
 	return 0;
 }
 
@@ -285,6 +294,12 @@ static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 
 	if (tb[IFLA_XDP]) {
 		ret = process_xdp_attr(tb[IFLA_XDP], &xdp_id->info);
+		if (ret)
+			return ret;
+	}
+
+	if (tb[IFLA_XDP_EGRESS]) {
+		ret = process_xdp_attr(tb[IFLA_XDP_EGRESS], &xdp_id->info);
 		if (ret)
 			return ret;
 	}
@@ -350,6 +365,22 @@ int bpf_get_link_xdp_id(int ifindex, __u32 *prog_id, __u32 flags)
 	ret = bpf_get_link_xdp_info(ifindex, &info, sizeof(info), flags);
 	if (!ret)
 		*prog_id = get_xdp_id(&info, flags);
+
+	return ret;
+}
+
+int bpf_get_link_xdp_egress_id(int ifindex, __u32 *prog_id, __u32 flags)
+{
+	struct xdp_link_info info = {};
+	int ret;
+
+	/* egress path does not support SKB, DRV or HW mode */
+	if (flags & XDP_FLAGS_MODES)
+		return -EINVAL;
+
+	ret = bpf_get_link_xdp_info(ifindex, &info, sizeof(info), flags);
+	if (!ret)
+		*prog_id = info.egress_core_prog_id;
 
 	return ret;
 }

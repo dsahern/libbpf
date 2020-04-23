@@ -254,3 +254,8 @@ LIBBPF_0.0.8 {
 		bpf_program__set_lsm;
 		bpf_set_link_xdp_fd_opts;
 } LIBBPF_0.0.7;
+
+LIBBPF_0.0.9 {
+	global:
+		bpf_get_link_xdp_egress_id;
+} LIBBPF_0.0.8;
